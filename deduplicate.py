@@ -24,26 +24,36 @@ import sys
 STOP = False
 
 def sigintHandler(x, y):
+	"""Set STOP to True and Stop the main loop"""
 	global STOP
 	STOP = True
 
 def inode(filename):
+	"""Helper function to return inode number of filename"""
 	return os.stat(filename).st_ino	
 
 def checkDuplicate(curInode, curFilename, curHash):
+	"""Check to see whether curFilename is a duplicate of
+	some other file that we've already seen."""
+
+	# hashToFilename[curHash] is a list of all the files
+	# that have the same first 32k (up to hash collision)
+	# as curFilename	
+
 	for altFilename in hashToFilename[curHash]:
 		altInode = inode(altFilename)
 		if altInode == curInode:
 			return True
 		else:
-			#print 'Possibly duplicates: %s %s' % (altFilename, curFilename)
+			# curFilename and altFilename have the same first 32k, so 
+			# see if they're actually the same file	
 			if filecmp.cmp(altFilename, curFilename, False):
+				# altFilename and curFilename are identical, so
+				# delete curFilename and hardlink it to altFilename
 
-				prefix = os.path.commonprefix([altFilename, curFilename])
-				prefixLength = len(prefix)
-				f1 = altFilename[prefixLength:]
-				f2 = curFilename[prefixLength:]
-
+				# The two files may have different properties,
+				# in particular atime/mtime; so choose the latest.
+				# (perms could also differ, but ignored for now)
 				curStat = os.stat(curFilename)
 				altStat = os.stat(altFilename)
 				mtime = max(curStat.st_mtime, altStat.st_mtime)
@@ -52,8 +62,8 @@ def checkDuplicate(curInode, curFilename, curHash):
 				print 'Deleting %s' % curFilename
 				os.unlink(curFilename)
 
-				print 'Linking %s' % f1
-				print '  --->  %s' % f2
+				print 'Linking %s' % altFilename
+				print '  --->  %s' % curFilename
 				os.link(altFilename, curFilename)
 				os.utime(altFilename, (atime, mtime))
 				return True
@@ -66,32 +76,41 @@ if __name__ == '__main__':
 
 	signal.signal(signal.SIGINT, sigintHandler)
 
+	# The input file is simply a list of filenames, one filename per line
 	inputFile = sys.argv[1]
 	f = open(inputFile, 'r')
 
 	while True:
 		curFilename = f.readline().strip()
-		if curFilename == '':
+		if curFilename == '': # EOF
 			break
 
-		if os.path.isdir(curFilename):
+		if os.path.isdir(curFilename): # Ignore directories
 			print 'Skipping Directory: %s' % curFilename
 			continue
 
+		# Determine the inode number of the current file
 		curInode = inode(curFilename)
 
 		if curInode not in inodeToHash:
+			# Not seen this inode before, hash the first 32k of the file
 			inodeToHash[curInode] = md5File.md5File(curFilename, 32768)
 
+		# Determine the hash of the current file
 		curHash = inodeToHash[curInode]
 
-		if curHash in hashToFilename:
-			if not checkDuplicate(curInode, curFilename, curHash):
-				hashToFilename[curHash].append(curFilename)
-		else:
+		# Have we seen a file with the same first 32k?
+		if curHash not in hashToFilename:
+			# No - can't possibly be a duplicate
 			hashToFilename[curHash] = [curFilename]
+		else:
+			# Yes - see whether we have a duplicate
+			if not checkDuplicate(curInode, curFilename, curHash):
+				# Wasn't a duplicate so add the filename to the list
+				hashToFilename[curHash].append(curFilename)
 
 		if STOP:
+			# Set by SIGINT
 			break
 				
 
