@@ -71,6 +71,8 @@ def checkDuplicate(curInode, curFilename, curHash):
 
 if __name__ == '__main__':
 
+	os.nice(5)
+
 	inodeToHash = {}
 	hashToFilename = {}
 
