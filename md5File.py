@@ -18,7 +18,7 @@ import hashlib
 import sys
 
 def md5File(filename, count=None):
-	"Calculate the MD5 sum of the first count bytes of filename.
+	"""Calculate the MD5 sum of the first count bytes of filename.
 
 	If count is none, calculate the hash for the whole file
 
